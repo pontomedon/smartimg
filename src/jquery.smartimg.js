@@ -110,7 +110,8 @@
 				$.ajax({
 					url: settings.imghandler,
 					cache: true,
-					data: {images: JSON.stringify(requestArray)},
+					data: {	method: 'getImage',
+							arg: JSON.stringify(requestArray)},
 					type: 'POST',
 					dataType: 'json',
 					async: true,

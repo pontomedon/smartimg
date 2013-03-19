@@ -3,15 +3,6 @@
 /**
  * 
  * @author pontomedon & mrmuh
- *
- * Data Structures used throughout this class:
- * ImageRequestBundle: Array:
- * - src	[required]	the path to the image
- * - width	[optional]	the desired width
- * - aspect	[optional]	the desired aspect ratio
- * 
- * Image: Array:
- * - src	[required]	the path to the image
  */
 class SmartImg
 {
@@ -36,15 +27,16 @@ class SmartImg
 	}
 	
 	/**
-	 * @TODO: describe!
-	 * 
-	 * @param ImageRequestBundle $imageRequestBundle
-	 * @return Image
+	 * @TODO: describe me
+	 * @param string	$src		the path to the image (may not be null)
+	 * @param int		$width		the desired width
+	 * @param string	$aspect		the desired aspect ratio
+	 * @return string				the path to the resized image
 	 */
-	private function getResizedImage($imageRequestBundle)
+	private function getResizedImage($src, $width=null, $aspect=null)
 	{
 		// TODO: implement me
-		return array('src' => $imageRequestBundle['src']);
+		return $src;
 	}
 	
 	/*
@@ -56,6 +48,14 @@ class SmartImg
 	/**
 	 * Batch processing call for getting resized images
 	 * 
+	 * Data Structures used here:
+	 * ImageRequestBundle: Array:
+	 * - src	[required]	the path to the image
+	 * - width	[optional]	the desired width
+	 * - aspect	[optional]	the desired aspect ratio
+	 * Image: Array:
+	 * - src	[required]	the path to the image
+	 * 
 	 * @param ImageRequestBundle[] $imageBundles
 	 * @return Image[]
 	 */
@@ -65,7 +65,16 @@ class SmartImg
 		
 		$result = array();
 		for($i=0; $i<count($imageRequestBundles); $i++)
-			$result[] = $smartImg->getResizedImage($imageRequestBundles[$i]);
+		{
+			$src	= isset($imageRequestBundles[$i]['src'])	? $imageRequestBundles[$i]['src']		: null;
+			$width	= isset($imageRequestBundles[$i]['width'])	? $imageRequestBundles[$i]['width']		: null;
+			$aspect	= isset($imageRequestBundles[$i]['aspect'])	? $imageRequestBundles[$i]['aspect']	: null;
+			
+			if($src !== null)
+				$result[] = array('src' => $smartImg->getResizedImage($src, $width, $aspect));
+			else
+				$result[] = array('src' => null);
+		}
 		
 		return $result;
 	}

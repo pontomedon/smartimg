@@ -15,7 +15,7 @@
 		var settings = $.extend( {
 			'selector'			:'img',
 			'src'				:'data-src',
-			'imghandler'		:'/smarting.php',
+			'imghandler'		:'/src/smarting.php',
 			'resizeThreshold'	:80,
 			'numberOfImgPerReq'	:5,
 		}, options);

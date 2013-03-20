@@ -7,37 +7,170 @@
 class SmartImg
 {
 
-	var $resolutions	= array(	1024,
-									768,
-									640,
-									320,
-									200,
-									100);
+	var $resolutions		= array(	1024,
+										768,
+										640,
+										320,
+										200,
+										100);
 	
-	var $aspects 		= array(	'16:10',
-									'16:9',
-									'4:3',
-									'1:1');
+	var $sourceAspect		= "original";
+	var $aspects 			= array(	'16:10',
+										'16:9',
+										'4:3',
+										'1:1');
+
+	var $cachingPath		= "../demo/img/cache";
+	var $cachingUrl			= "/demo/img/cache";
 	
 	/**
 	 * Constructor
 	 */
 	function __construct()
 	{
+		
+	}
+	
+	protected function getNextHigherResolution($resolutionToTest){
+		// init with highest resolution
+		$nextHigherResoltion = $this->resolutions[0];
+				
+		// iterate over all defined resolutions
+		foreach($this->resolutions as $resolution){
+			
+			if($resolution >= $resolutionToTest)
+				$nextHigherResoltion = $resolution;
+			else
+				// nextHigherResoltion holds correct size
+				break;
+		}
+		
+		return $nextHigherResoltion;
+	}
+	
+	protected function getSanitizedAspect($aspect){
+		return str_replace(":","_",$aspect);
+	}
+	
+	protected function getAspectValues($aspect){
+		return explode(":",$aspect);
 	}
 	
 	/**
 	 * @TODO: describe me
-	 * @param string	$src		the path to the image (may not be null)
+	 * @param string $aspect the aspect ration as string e.g. "1:1"
+	 * @param array $aspectVal array containing the numeric values (write back!)
+	 * @param string $aspectDir sanitized folder name (write back!)
+	 * @return the aspect enum from resolutions
+	 */
+	protected function getAspect($aspect, &$aspectVal, &$aspectDir){
+		
+		// determine aspect from list
+		if($aspect!=null && in_array($aspect,$this->aspects)){
+			// convert aspect string to values
+			$aspectVal = $this->getAspectValues($aspect);
+		}else{
+			$aspect = $this->sourceAspect;
+		}
+			
+		// get dirname of aspect
+		$aspectDir = $this->getSanitizedAspect($aspect);
+		
+		return $aspect;
+	}
+	
+	/**
+	 * @TODO: describe me
+	 * @param string	$src		the absolute path to the image (may not be null)
 	 * @param int		$width		the desired width
 	 * @param string	$aspect		the desired aspect ratio
 	 * @return string				the path to the resized image
 	 */
 	private function getResizedImage($src, $width=null, $aspect=null)
-	{
-		// TODO: implement me
-		return $src;
+	{		
+		// get document root to complete the absolute path
+		$absPath =  $_SERVER['DOCUMENT_ROOT'].$src;
+		
+		// check for existence
+		if(file_exists($absPath)) {
+
+			// determine resolution breakpoint
+			$widthBreakpoint = $this->getNextHigherResolution($width); 
+			
+			// determine aspect parameters
+			// note: aspectVal and aspectDir are used for writing back from the method
+			$aspect = $this->getAspect($aspect, $aspectVal, $aspectDir);
+			
+			
+			/*
+			 * check if desired image exists
+			 */ 
+			
+			// use the cachedir for resized images
+			// dir structure follows the following design:
+			// [cachefolder][resolutionbreakpoint][aspect]
+			
+			// breakpoint folder
+			$imagePath = $this->cachingPath."/".$widthBreakpoint;
+			if(!file_exists($imagePath))
+				mkdir($imagePath);
+			
+			// aspect folder
+			$imagePath .= "/".$aspectDir;
+			if(!file_exists($imagePath))
+				mkdir($imagePath);
+			
+			
+			// complete filename
+			$imagePath .= "/".basename($src);
+			
+			// check if file exists
+			if(file_exists($imagePath)){
+				// return url!
+				return $this->cachingUrl."/".$widthBreakpoint."/".$aspectDir."/".basename($src);
+			}
+			
+			/*
+			 * image does not exist -> process 
+			 */
+			
+			// init imagine
+			$imagine = new \Imagine\Gd\Imagine();
+						
+			// open original image
+			$image = $imagine->open($absPath);
+			// get size
+			$size = $image->getSize();
+			
+			// resize by maintaining the aspect
+			$newSize = $size->widen($widthBreakpoint);
+			$image->resize($newSize);
+			
+			/*
+			 *	Aspect is set -> crop image 
+			 */
+			if($aspect != $this->sourceAspect){
+				
+				// define box of cropped image
+				$cropBox = new Imagine\Image\Box(	$newSize->getWidth(), 
+													$newSize->getWidth() * ($aspectVal[1]/$aspectVal[0]));
+				
+				$image = $image->thumbnail($cropBox);		
+				var_dump($size->getWidth() * ($aspectVal[1]/$aspectVal[0]));
+			}
+			
+			
+			// store processed image
+			$image->save($imagePath);
+			
+			// return url			
+			return $this->cachingUrl."/".$widthBreakpoint."/".$aspectDir."/".basename($src);
+		}else{
+			throw new Exception('Source image not found!');
+		}	
 	}
+	
+	
 	
 	/*
 	 * --------------------------------------------------------------------------------
@@ -87,6 +220,7 @@ class SmartImg
 	}
 }
 
+
 /*
  * utility methods
  */
@@ -96,6 +230,27 @@ function exit_error($message)
 	echo $message;
 	die;
 }
+
+/*
+ * setup autoload for imagine
+ * Credit: http://www.phparch.com/2011/03/image-processing-with-imagine/
+ */
+function imagineLoader($class) {
+	// relative path to lib
+	$base = dirname(__FILE__);
+	$base .= '/../lib/Imagine/lib/';
+	
+	// convert class name to path
+	$path = $class;
+	$path = str_replace('\\', DIRECTORY_SEPARATOR, $path) . '.php';
+	$path = $base.$path;
+
+	if (file_exists($path)) {
+		include $path;
+	}
+}
+spl_autoload_register('\imagineLoader');
+
 
 /*
  * process request

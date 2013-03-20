@@ -18,6 +18,7 @@
 			'imghandler'		:'/src/smarting.php',
 			'resizeThreshold'	:80,
 			'numberOfImgPerReq'	:5,
+			'respMarkerClass'	:'.responsive',
 		}, options);
 
 		/*
@@ -32,10 +33,13 @@
 		var windowWidthRef = $(window).width();
 		
 		/*
-		 * select images within the container 
+		 *  responsive and non responsive images within the container 
 		 */
-		var imageSet = $(this).find(settings.selector);
-			
+		var respImageSet;
+		var fixedImageSet;
+		
+		// split image set into resp. and non responsive images
+		filterImageSet($(this));
 		
 		
 		/*
@@ -50,7 +54,7 @@
 				// store new width as reference
 				windowWidthRef = $(window).width();
 				// trigger requests
-				requestBatches();				
+				requestBatches(respImageSet);
 			}
 		});
 		
@@ -59,46 +63,37 @@
 		 * LOAD EVENT
 		 */		
 		$(window).on('load', function() {
-			requestBatches();
+			requestBatches(respImageSet);
+			requestBatches(fixedImageSet);
 		});
 		
-		
-		/**
-		 * ADD IMAGES TO SET
-		 * @param elements newImages	one or more elements to add
-		 */
-		function addImages(newImages){
-			// note: according to http://api.jquery.com/add/ add() generates a new set
-			// hence, the indices also change according to the order in the document
+		function filterImageSet(imageContainer){
+			// whole image set
+			var imageSet = imageContainer.find(settings.selector);
 			
-			//TODO: test behavior
-			imageSet = imageSet.add(newImages);
-		}		
+			// filter responive set
+			respImageSet = imageSet.filter(settings.respMarkerClass);
+			// filter images not handled as responsive
+			fixedImageSet = imageSet.not(settings.respMarkerClass);
+		}
 		
-		/**
-		 * REMOVE IMAGES FROM SET
-		 * @param elements imagesToRemove	one or more elements to remove
-		 */
-		function removeImages(imagesToRemove){
-			//TODO: test behavior
-			imageSet = imageSet.not(newImages);
-		}		
 		
 		/**
 		 * REQUEST NEW IMAGES USING BATCH PROCESSING
 		 */
-		function requestBatches(){
+		function requestBatches(images){
+			
 			var startIdx = 0;
-			var endIdx = 0;
+			var endIdx = 0;					
 			
 			// iterate over set using the number of images per request
-			for(i=0; i < Math.ceil(imageSet.length/settings.numberOfImgPerReq) ; i++){
+			for(i=0; i < Math.ceil(images.length/settings.numberOfImgPerReq) ; i++){
 				
 				startIdx = i*settings.numberOfImgPerReq;
 				endIdx = startIdx + settings.numberOfImgPerReq;
 				
 				// select subset
-				var requestImages = imageSet.slice(startIdx,endIdx);
+				var requestImages = images.slice(startIdx,endIdx);
 				// generate array for request
 				var requestArray = createReqArray(requestImages);
 
@@ -153,12 +148,61 @@
 			images.each(function(idx){ 
 				var image = $(this);
 				idxMap[idx] = new Object();
+				// absolute path to original image src
 				idxMap[idx]["src"] = image.attr("data-src");
+				// desired width of the image
 				idxMap[idx]["width"] = image.width();
 				
+				// optional aspect attribute 
+				var aspect = image.attr("data-aspect");
+				if (aspect !== undefined)
+					idxMap[idx]["aspect"] = aspect;				
+				
+				delete image;
 				// TODO: retina displays
 			});			
 			return idxMap;
 		}
+		
+		
+		
+		/**
+		 * ADD IMAGES TO SET
+		 * @param elements newImages	one or more elements to add
+		 */
+		var addImages = function(newImages){
+			// note: according to http://api.jquery.com/add/ add() generates a new set
+			// hence, the indices also change according to the order in the document
+	
+			var newRespImages = newImages.filter(settings.respMarkerClass);
+			var newFixedImages = newImages.not(settings.respMarkerClass);
+			
+			// filter responive set
+			respImageSet = respImageSet.add(newRespImages);
+			// filter images not handled as responsive
+			fixedImageSet = fixedImageSet.add(newFixedImages);
+			
+			// trigger load function for new images
+			requestBatches(newRespImages);
+			requestBatches(newFixedImages);
+		
+		};	
+		
+		/**
+		 * REMOVE IMAGES FROM SET
+		 * @param elements imagesToRemove	one or more elements to remove
+		 */
+		var removeImages = function(imagesToRemove){
+			// filter responive set
+			respImageSet = respImageSet.not(imagesToRemove.filter(settings.respMarkerClass));
+			// filter images not handled as responsive
+			fixedImageSet = fixedImageSet.not(imagesToRemove.not(settings.respMarkerClass));
+		};		
+		
+		
+		return {
+			addImages: addImages,
+			removeImages: removeImages
+        }
 	};
 })( jQuery );

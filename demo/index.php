@@ -12,7 +12,10 @@
 	<script type="text/javascript" src="../src/jquery.smartimg.js"></script> 
 	<script type="text/javascript">
 		$(document).ready(function() {
-			$("#photos").smartimg();
+			var si = $("#photos").smartimg();
+
+			// add further images
+			si.addImages($("#nonrespphotos img"));
 		});
 	</script> 
 	
@@ -23,13 +26,14 @@
 
 	<section id="photos">
 		<?php 
-		for ($i = 0; $i < 48; $i++) {
-			echo '<img src="http://placehold.it/100x100" data-src="img/'.$i.'.jpg" >';
+		for ($i = 0; $i < 20; $i++) {
+			echo '<img src="http://placehold.it/100x100" class="responsive" data-aspect="1:1" data-src="/demo/img/'.$i.'.jpg" >';
 		}
 		?>
-	
 	</section>
-	
+	<section id="nonrespphotos">
+		<img src="http://placehold.it/100x100" data-src="/demo/img/0.jpg" >
+	</section>
 </body>
 
 </html>

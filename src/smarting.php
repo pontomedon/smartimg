@@ -1,27 +1,29 @@
 ﻿<?php
 
+define('REGEX_WIDTH', '/^[\d]+$/');
+define('REGEX_ASPECT', '/^[\d]+:[\d]+$/');
+
 /**
  * 
  * @author pontomedon & mrmuh
  */
 class SmartImg
 {
+	/*
+	 * Settings
+	 */
+	var $resolutions	= array(	1024,
+									768,
+									640,
+									320,
+									200,
+									100);
+	var $aspects 		= array(	'16:10',
+									'16:9',
+									'4:3',
+									'1:1');
 
-	var $resolutions		= array(	1024,
-										768,
-										640,
-										320,
-										200,
-										100);
-	
-	var $sourceAspect		= "original";
-	var $aspects 			= array(	'16:10',
-										'16:9',
-										'4:3',
-										'1:1');
-
-	var $cachingPath		= "../demo/img/cache";
-	var $cachingUrl			= "/demo/img/cache";
+	var $cacheRootDir	= "/demo/img/cache";
 	
 	/**
 	 * Constructor
@@ -31,21 +33,35 @@ class SmartImg
 		
 	}
 	
-	protected function getNextHigherResolution($resolutionToTest){
-		// init with highest resolution
-		$nextHigherResoltion = $this->resolutions[0];
-				
-		// iterate over all defined resolutions
-		foreach($this->resolutions as $resolution){
-			
-			if($resolution >= $resolutionToTest)
-				$nextHigherResoltion = $resolution;
+	/**
+	 * finds the next larger resolution breakpoint for the given width
+	 * @param integer $width
+	 * @return integer|string:	either the resolution breakpoint or the string 'orig' if
+	 * 							the requested width is larger than the largest breakpoint
+	 */
+	private function getWidthBreakpoint($width)
+	{
+		// if no width was passed, we don't resize
+		if($width === null)
+			return 'orig';
+		
+		// copy and sort the resolutions array, just in case
+		$resolutions = $this->resolutions;
+		arsort($resolutions);
+		
+		// if the image is larger than the largest breakpoint, we don't resize
+		if($width >= $resolutions[0])
+			return 'orig';
+		
+		$resultingBreakpoint = $resolutions[0];
+		foreach($resolutions as $currentBreakpoint)
+		{
+			if($currentBreakpoint >= $width)
+				$resultingBreakpoint = $currentBreakpoint;
 			else
-				// nextHigherResoltion holds correct size
 				break;
 		}
-		
-		return $nextHigherResoltion;
+		return $resultingBreakpoint;
 	}
 	
 	protected function getSanitizedAspect($aspect){
@@ -66,12 +82,11 @@ class SmartImg
 	protected function getAspect($aspect, &$aspectVal, &$aspectDir){
 		
 		// determine aspect from list
-		if($aspect!=null && in_array($aspect,$this->aspects)){
+		if($aspect!=null && in_array($aspect,$this->aspects))
 			// convert aspect string to values
 			$aspectVal = $this->getAspectValues($aspect);
-		}else{
+		else
 			$aspect = $this->sourceAspect;
-		}
 			
 		// get dirname of aspect
 		$aspectDir = $this->getSanitizedAspect($aspect);
@@ -80,94 +95,115 @@ class SmartImg
 	}
 	
 	/**
+	 * processes an image path, splitting it into directory and file
+	 * @param string $srcPath	the full path
+	 * @param string $srcDir	[out] the directory component, either an empty string or a path with a leading slash
+	 * @param string $srcFile	[out] the file component, without a leading slash
+	 */
+	private function splitPath($srcPath, &$srcDir, &$srcFile)
+	{
+		// remove leading slash, if existent
+		if($srcPath[0] === '/')
+			$srcPath = substr($srcPath, 1);
+		
+		// default values
+		$srcDir = '';
+		$srcFile = $srcPath;
+		
+		// let's see if there's a remaining slash
+		$lastSlash = strrpos($srcPath, '/');
+		if($lastSlash !== false)
+		{
+			$srcDir = '/' . substr($srcPath, 0, $lastSlash);
+			$srcFile = substr($srcPath, $lastSlash + 1);
+		}
+	}
+	
+	/**
+	 * checks whether $cachePath exists and has the same mtime as $srcPath
+	 * @param string $cachePath		absolute path to the cache file
+	 * @param string $srcPath		absolute path to the source file
+	 * @return boolean if $cachePath exists and has the same mtime as $srcPath
+	 */
+	private function checkCache($cachePath, $srcPath)
+	{
+		if(	file_exists($_SERVER['DOCUMENT_ROOT'].$cachePath) &&
+			filemtime($_SERVER['DOCUMENT_ROOT'].$cachePath) == filemtime($_SERVER['DOCUMENT_ROOT'].$srcPath))
+			return true;
+		return false;
+	}
+	
+	/**
 	 * @TODO: describe me
-	 * @param string	$src		the absolute path to the image (may not be null)
+	 * @param string	$srcPath	the absolute path to the image (may not be null)
 	 * @param int		$width		the desired width
 	 * @param string	$aspect		the desired aspect ratio
 	 * @return string				the path to the resized image
 	 */
-	private function getResizedImage($src, $width=null, $aspect=null)
-	{		
-		// get document root to complete the absolute path
-		$absPath =  $_SERVER['DOCUMENT_ROOT'].$src;
+	private function getResizedImage($srcPath, $width=null, $aspect=null)
+	{
+		// check if the file exists
+		if(!file_exists($_SERVER['DOCUMENT_ROOT'].$srcPath))
+			return null;
 		
-		// check for existence
-		if(file_exists($absPath)) {
-
-			// determine resolution breakpoint
-			$widthBreakpoint = $this->getNextHigherResolution($width); 
+		// split src into srcDir and srcFile (write-back params!)
+		$this->splitPath($srcPath, $srcDir, $filename);
+		
+		// determine resolution breakpoint
+		$widthBreakpoint = $this->getWidthBreakpoint($width);
 			
-			// determine aspect parameters
-			// note: aspectVal and aspectDir are used for writing back from the method
-			$aspect = $this->getAspect($aspect, $aspectVal, $aspectDir);
-			
-			
-			/*
-			 * check if desired image exists
-			 */ 
-			
-			// use the cachedir for resized images
-			// dir structure follows the following design:
-			// [cachefolder][resolutionbreakpoint][aspect]
-			
-			// breakpoint folder
-			$imagePath = $this->cachingPath."/".$widthBreakpoint;
-			if(!file_exists($imagePath))
-				mkdir($imagePath);
-			
-			// aspect folder
-			$imagePath .= "/".$aspectDir;
-			if(!file_exists($imagePath))
-				mkdir($imagePath);
-			
-			
-			// complete filename
-			$imagePath .= "/".basename($src);
-			
-			// check if file exists
-			if(file_exists($imagePath)){
-				// return url!
-				return $this->cachingUrl."/".$widthBreakpoint."/".$aspectDir."/".basename($src);
-			}
+		// determine aspect parameters
+		// note: aspectVal and aspectDir are used for writing back from the method
+		$aspect = $this->getAspect($aspect, $aspectVal, $aspectDir);
+		
+		/*
+		 * calculuate the cache path
+		 * the cache folder is organized as follows:
+		 * [cachefolder][aspect][resolutionbreakpoint]
+		 */
+		$cacheDir = $this->cacheRootDir . '/' . $aspectDir . '/' . $widthBreakpoint . $srcDir;
+		$cachePath = $cacheDir . '/' . $filename;
+		
+		// check cache
+		if(!$this->checkCache($cachePath, $srcPath))
+		{
+			if(!file_exists($_SERVER['DOCUMENT_ROOT'].$cacheDir))
+				mkdir($_SERVER['DOCUMENT_ROOT'].$cacheDir, 0755, true);
 			
 			/*
-			 * image does not exist -> process 
+			 * TODO: resize image instead of just copying
 			 */
-			
-			// init imagine
-			$imagine = new \Imagine\Gd\Imagine();
-						
-			// open original image
-			$image = $imagine->open($absPath);
-			// get size
-			$size = $image->getSize();
-			
-			// resize by maintaining the aspect
-			$newSize = $size->widen($widthBreakpoint);
-			$image->resize($newSize);
-			
-			/*
-			 *	Aspect is set -> crop image 
-			 */
-			if($aspect != $this->sourceAspect){
-				
-				// define box of cropped image
-				$cropBox = new Imagine\Image\Box(	$newSize->getWidth(), 
-													$newSize->getWidth() * ($aspectVal[1]/$aspectVal[0]));
-				
-				$image = $image->thumbnail($cropBox);		
-				var_dump($size->getWidth() * ($aspectVal[1]/$aspectVal[0]));
-			}
+			copy($_SERVER['DOCUMENT_ROOT'].$srcPath, $_SERVER['DOCUMENT_ROOT'].$cachePath);
 			
 			
-			// store processed image
-			$image->save($imagePath);
+// 			// init imagine
+// 			$imagine = new \Imagine\Gd\Imagine();
+// 			// open original image
+// 			$image = $imagine->open($absPath);
+// 			// get size
+// 			$size = $image->getSize();
+// 			// resize by maintaining the aspect
+// 			$newSize = $size->widen($widthBreakpoint);
+// 			$image->resize($newSize);
+// 			/*
+// 			 *	Aspect is set -> crop image
+// 			*/
+// 			if($aspect != $this->sourceAspect){
+// 			// define box of cropped image
+// 				$cropBox = new Imagine\Image\Box(	$newSize->getWidth(),
+// 													$newSize->getWidth() * ($aspectVal[1]/$aspectVal[0]));
+// 				$image = $image->thumbnail($cropBox);
+// 				var_dump($size->getWidth() * ($aspectVal[1]/$aspectVal[0]));
+// 			}
+// 			// store processed image
+// 			$image->save($imagePath);
 			
-			// return url			
-			return $this->cachingUrl."/".$widthBreakpoint."/".$aspectDir."/".basename($src);
-		}else{
-			throw new Exception('Source image not found!');
-		}	
+			
+			// set mtime
+			touch($_SERVER['DOCUMENT_ROOT'].$cachePath, filemtime($_SERVER['DOCUMENT_ROOT'].$srcPath));
+		}
+		
+		return $cachePath;
 	}
 	
 	
@@ -203,8 +239,19 @@ class SmartImg
 			$width	= isset($imageRequestBundles[$i]['width'])	? $imageRequestBundles[$i]['width']		: null;
 			$aspect	= isset($imageRequestBundles[$i]['aspect'])	? $imageRequestBundles[$i]['aspect']	: null;
 			
-			if($src !== null)
-				$result[] = array('src' => $smartImg->getResizedImage($src, $width, $aspect));
+			// if width or aspect are invalid, ignore them.
+			if(!preg_match(REGEX_WIDTH, $width))
+				$width = null;
+			if(!preg_match(REGEX_ASPECT, $aspect))
+				$aspect = null;
+			
+			if($src !== null && strcmp($src,'') != 0)
+			{
+				if($width === null && $aspect === null)
+					$result[] = array('src' => $src); // shortcut
+				else
+					$result[] = array('src' => $smartImg->getResizedImage($src, $width, $aspect));
+			}
 			else
 				$result[] = array('src' => null);
 		}
@@ -220,7 +267,6 @@ class SmartImg
 	}
 }
 
-
 /*
  * utility methods
  */
@@ -232,28 +278,13 @@ function exit_error($message)
 }
 
 /*
- * setup autoload for imagine
- * Credit: http://www.phparch.com/2011/03/image-processing-with-imagine/
+ * check GD
  */
-function imagineLoader($class) {
-	// relative path to lib
-	$base = dirname(__FILE__);
-	$base .= '/../lib/Imagine/lib/';
-	
-	// convert class name to path
-	$path = $class;
-	$path = str_replace('\\', DIRECTORY_SEPARATOR, $path) . '.php';
-	$path = $base.$path;
-
-	if (file_exists($path)) {
-		include $path;
-	}
-}
-spl_autoload_register('\imagineLoader');
-
+if((!extension_loaded('gd')) && (!function_exists('dl') || !dl('gd.so')))
+	exit_error('Unable to load GD');
 
 /*
- * process request
+ * check call
  */
 if(!isset($_REQUEST['method']))
 	exit_error('mandatory parameter method not given.');
@@ -263,6 +294,9 @@ $method = $_REQUEST['method'];
 if(!is_callable(array('SmartImg', $method)))
 	exit_error('undefined method ' . $method);
 
+/*
+ * execute call
+ */
 if(isset($_REQUEST['arg']))
 	echo json_encode(call_user_func(array('SmartImg', $method), json_decode($_REQUEST['arg'],true)));
 else if(isset($_REQUEST['args']))

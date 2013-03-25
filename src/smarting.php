@@ -12,20 +12,30 @@ class SmartImg
 	/*
 	 * User Settings
 	 */
+	// the resolution breakpoints
 	var $resolutions			= array(	1024,
 											800,
 											640,
 											320,
 											200,
 											100);
+	
+	// the aspect breakpoints
 	var $aspects 				= array(	'16:10',
 											'16:9',
 											'4:3',
 											'1:1');
-	const DEFAULT_ASPECT 		= "orig";
-	const DEFAULT_RESOLUTION	= "orig";
-	const JPEG_QUALITY			= 75;
 	
+	// the directory for the original aspect
+	const DEFAULT_ASPECT 		= "orig";
+	// the directory for the original resolution
+	const DEFAULT_RESOLUTION	= "orig";
+	// the quality settings for jpeg images
+	const JPEG_QUALITY			= 75;
+	// whether or not to return the src when something goes wrong. useful for images outside of the docroot (urls, etc)
+	const RETURN_SRC_ON_FAIL	= true;
+	
+	// the cache directory, relative to the docroot
 	var $cacheRootDir			= "/demo/img/cache";
 	
 	/*
@@ -334,7 +344,7 @@ class SmartImg
 	}
 	
 	/**
-	 * @TODO: describe me
+	 * Gets an image for the specified width and aspect
 	 * @param string	$srcPath	the absolute path to the image (may not be null)
 	 * @param int		$width		the desired width
 	 * @param string	$aspectStr	the desired aspect ratio
@@ -344,7 +354,12 @@ class SmartImg
 	{
 		// check if the file exists
 		if(!file_exists($_SERVER['DOCUMENT_ROOT'].$srcPath))
-			return null;
+		{
+			if(SmartImg::RETURN_SRC_ON_FAIL)
+				return $srcPath;
+			else
+				return null;
+		}
 		
 		// split src into srcDir and srcFile (write-back params!)
 		$this->splitPath($srcPath, $srcDir, $filename);
@@ -533,7 +548,12 @@ class SmartImg
 					$result[] = array('src' => $smartImg->getResizedImage($src, $width, $aspect));
 			}
 			else
-				$result[] = array('src' => null);
+			{
+				if(SmartImg::RETURN_SRC_ON_FAIL)
+					$result[] = array('src' => $srcPath);
+				else
+					$result[] = array('src' => null);
+			}
 		}
 		
 		return $result;

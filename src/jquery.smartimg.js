@@ -13,12 +13,15 @@
 		 * - imghandler: path to the image handler (the php script)  
 		 */
 		var settings = $.extend( {
-			'selector'			:'img',
-			'src'				:'data-src',
-			'imghandler'		:'/src/smarting.php',
-			'resizeThreshold'	:80,
-			'numberOfImgPerReq'	:5,
-			'respMarkerClass'	:'.responsive',
+			selector				:'img',
+			src						:'data-src',
+			imghandler				:'/src/smarting.php',
+			resizeThreshold			:80,
+			numberOfImgPerReq		:5,
+			respMarkerClass			:'.responsive',
+			isImagesLoadedIncluded	:false,
+			cbInitload				:function(){},
+			
 		}, options);
 
 		/*
@@ -38,8 +41,10 @@
 		var respImageSet;
 		var fixedImageSet;
 		
+		var container = $(this);
+		
 		// split image set into resp. and non responsive images
-		filterImageSet($(this));
+		filterImageSet(container);
 		
 		
 		/*
@@ -63,8 +68,28 @@
 		 * LOAD EVENT
 		 */		
 		$(window).on('load', function() {
-			requestBatches(respImageSet);
-			requestBatches(fixedImageSet);
+			var respPromiseQueue = requestBatches(respImageSet);
+			var fixedPromiseQueue = requestBatches(fixedImageSet);
+			var promiseQueue = respPromiseQueue.concat(fixedPromiseQueue);
+			
+			var joinedImageSet = respImageSet.add(fixedImageSet);
+			
+			/*
+			 * all async requests are synced using the jquery deferred approach
+			 */
+			$.when.apply(this, promiseQueue).then(function() {
+				
+				// all batches returned and images are replaced
+				// note: at this point we dont know if the images are loaded!
+				if(settings.isImagesLoadedIncluded){
+					// use imagesloaded plugin to detect loaded images
+					joinedImageSet.imagesLoaded(function(){
+						// call user defined cb
+						settings.cbInitload.call();
+					});
+				}
+			});
+			
 		});
 		
 		function filterImageSet(imageContainer){
@@ -86,6 +111,8 @@
 			var startIdx = 0;
 			var endIdx = 0;					
 			
+			var reqList = [];
+			
 			// iterate over set using the number of images per request
 			for(i=0; i < Math.ceil(images.length/settings.numberOfImgPerReq) ; i++){
 				
@@ -102,36 +129,37 @@
 				 * note: to keep references between requestImages and requestArray
 				 * the images are copied into the request context -> indices match
 				 */
-				$.ajax({
-					url: settings.imghandler,
-					cache: true,
-					data: {	method: 'getImage',
-							arg: JSON.stringify(requestArray)},
-					type: 'POST',
-					dataType: 'json',
-					async: true,
-					context:{	images:	requestImages},
-					
-					// callback for results
-					success: function(data){		
-						var img;
-						// iterate over results
-						// note: indices have to match at this point!
-						for (var i in data){
-							
-							// get image from set
-							img = this.images.eq(i);
-							
-							// replace images from context if required (src has changed)
-							if(img.attr("src") != data[i]["src"]){
-								img.attr("src",data[i]["src"]);
-							}								
-						}
-					},					
-				});
-				
+
+				var reqPromise = $.ajax({
+										url: settings.imghandler,
+										cache: true,
+										data: {	method: 'getImage',
+												arg: JSON.stringify(requestArray)},
+										type: 'POST',
+										dataType: 'json',
+										async: true,
+										context:{	images:	requestImages},
+										
+										// callback for results
+										success: function(data){
+											var img;
+											// iterate over results
+											// note: indices have to match at this point!
+											for (var i in data){
+												
+												// get image from set
+												img = this.images.eq(i);
+												
+												// replace images from context if required (src has changed)
+												if(img.attr("src") != data[i]["src"]){
+													img.attr("src",data[i]["src"]);
+												}								
+											}
+										},					
+									});
+				reqList.push(reqPromise);
 			}
-			
+			return reqList;
 		}
 		
 		/**

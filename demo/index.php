@@ -9,10 +9,14 @@
 	<link rel='stylesheet' href='css/style.css'>
 	
 	<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> 
+	<script type="text/javascript" src="https://raw.github.com/desandro/imagesloaded/master/jquery.imagesloaded.min.js"></script> 
 	<script type="text/javascript" src="../src/jquery.smartimg.js"></script> 
 	<script type="text/javascript">
 		$(document).ready(function() {
-			var si = $("#photos").smartimg();
+			var si = $("#photos").smartimg({	
+												isImagesLoadedIncluded: true,
+												cbInitload: function(){ console.log("muh loaded");},
+											});
 
 			// add further images
 			si.addImages($("#nonrespphotos img"));

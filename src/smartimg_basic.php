@@ -10,7 +10,7 @@ if((!extension_loaded('gd')) && (!function_exists('dl') || !dl('gd.so')))
 
 /*
  * check call
-*/
+ */
 if(!isset($_REQUEST['src']))
 	SmartImg::exit_error('mandatory parameter src not given.');
 
@@ -20,6 +20,10 @@ $result = SmartImg::getImage(array(array(
 		'aspect' => (isset($_REQUEST['a']) ? $_REQUEST['a'] : null)
 )));
 
+/*
+ * echo image
+ */
+
 $file=$_SERVER['DOCUMENT_ROOT'].$result[0]['src'];
 
 $size = getimagesize($file);
@@ -28,6 +32,9 @@ if ($size && $fp)
 {
 	header('Content-Type: ' . $size['mime']);
 	header('Content-Length: ' . filesize($file));
+	header("Content-Transfer-Encoding: binary\n");
+	ob_clean();
+	flush();
 	fpassthru($fp);
 }
 else

@@ -1,7 +1,6 @@
 <?php
 
-require_once "smartimg.php";
-
+require_once("smartimg.php");
 /*
  * check GD
 */

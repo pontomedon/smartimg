@@ -528,7 +528,6 @@ class SmartImg
 				echo ($result ? "ok" : "failed") . "<br>\n";
 				return $result;
 			}
-			echo "skipping " . $path . " (not empty)<br>\n";
 			return false;
 		}
 		else if(is_file($path))
@@ -538,7 +537,6 @@ class SmartImg
 			echo ($result ? "ok" : "failed") . "<br>\n";
 			return $result;
 		}
-		echo "skipping " . $path . " (not a file or directory)<br>\n";
 		return false;
 	}
 	
@@ -569,14 +567,12 @@ class SmartImg
 			
 			if($empty)
 				return $this->recursiveDelete($cacheFile);
-			echo "skipping " . $cacheFile . " (not empty)<br>\n";
 		}
 		else if(is_file($cacheFile))
 		{
 			$srcFile = $_SERVER['DOCUMENT_ROOT'] . '/' . $path;
 			if(!is_file($srcFile) || filemtime($cacheFile) < filemtime($srcFile))
 				return $this->recursiveDelete($cacheFile);
-			echo "up-to-date: " . $cacheFile . "<br>\n";
 		}
 		
 		return false;

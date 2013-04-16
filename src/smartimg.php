@@ -36,7 +36,7 @@ class SmartImg
 	const RETURN_SRC_ON_FAIL	= true;
 	
 	// the cache directory, relative to the docroot
-	var $cacheRootDir			= "/demo/img/cache";
+	var $cacheRootDir			= "/demo/cache";
 	
 	/*
 	 * --------------------------------------------------------------------------------
@@ -636,6 +636,11 @@ class SmartImg
 		}
 		
 		return $result;
+	}
+	
+	public static function renderAll($dir)
+	{
+		
 	}
 	
 	public static function cleanup()

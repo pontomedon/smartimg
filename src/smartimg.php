@@ -277,8 +277,8 @@ class SmartImg
 		}
 		return array(
 				'resource' => $img,
-				'width' => imagesx($img),
-				'height' => imagesy($img),
+				'width' => $imageSize[0],
+				'height' => $imageSize[1],
 				'type' => $imageSize[2]
 		);
 	}
@@ -625,8 +625,7 @@ class SmartImg
 		{
 			set_time_limit(30);
 			array_splice($result, count($result), 0, SmartImg::getImage(array_slice($imageRequestBundles, 0, 10)));
-			if(count($imageRequestBundles) > 10)
-				$imageRequestBundles = array_slice($imageRequestBundles, 10);
+			$imageRequestBundles = array_slice($imageRequestBundles, min(count($imageRequestBundles),10));
 		}
 		var_dump($result);
 		

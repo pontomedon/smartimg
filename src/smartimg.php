@@ -501,7 +501,86 @@ class SmartImg
 		return $cachePath;
 	}
 	
+	/**
+	 * deletes a file or directory, recursively if necessary
+	 * @param string $path
+	 * @return bool <true> if successful, false otherwise
+	 */
+	private function recursiveDelete($path)
+	{
+		if(is_dir($path))
+		{
+			$empty = true;
+				
+			$dir = opendir($path);
+			while (($file = readdir($dir)) !== false)
+			{
+				if($file === '.' || $file === '..')
+					continue;
+				$empty = $empty && $this->recursiveDelete($path . '/' . $file);
+			}
+			closedir($dir);
+				
+			if($empty)
+			{
+				echo "rmdir(" . $path . ") ... ";
+				$result = @rmdir($path);
+				echo ($result ? "ok" : "failed") . "<br>\n";
+				return $result;
+			}
+			echo "skipping " . $path . " (not empty)<br>\n";
+			return false;
+		}
+		else if(is_file($path))
+		{
+			echo "unlink(" . $path . ") ... ";
+			$result = @unlink($path);
+			echo ($result ? "ok" : "failed") . "<br>\n";
+			return $result;
+		}
+		echo "skipping " . $path . " (not a file or directory)<br>\n";
+		return false;
+	}
 	
+	/**
+	 * cleans up a given dir or file, recursively if it's a dir
+	 * @param string $cacheSubRoot the first two components of the cache path, i.e. the aspect and resolution folders
+	 * @param string $path the rest of the path
+	 * @return boolean <true> if the file given by path was deleted or <false> otherwise
+	 */
+	private function cleanupCache($cacheSubRoot, $path)
+	{
+		$cacheRoot = $_SERVER['DOCUMENT_ROOT'] . $this->cacheRootDir . '/';
+		$cacheFile = $cacheRoot . $cacheSubRoot . '/' . $path;
+		
+		if(is_dir($cacheFile))
+		{
+			$empty = true;
+			
+			$dir = opendir($cacheFile);
+			while (($file = readdir($dir)) !== false)
+			{
+				if($file === '.' || $file === '..')
+					continue;
+				if(($this->cleanupCache($cacheSubRoot, ($path !== '' ? ($path . '/') : '') . $file)) === false)
+					$empty=false;
+			}
+			closedir($dir);
+			
+			if($empty)
+				return $this->recursiveDelete($cacheFile);
+			echo "skipping " . $cacheFile . " (not empty)<br>\n";
+		}
+		else if(is_file($cacheFile))
+		{
+			$srcFile = $_SERVER['DOCUMENT_ROOT'] . '/' . $path;
+			if(!is_file($srcFile) || filemtime($cacheFile) < filemtime($srcFile))
+				return $this->recursiveDelete($cacheFile);
+			echo "up-to-date: " . $cacheFile . "<br>\n";
+		}
+		
+		return false;
+	}
 	
 	/*
 	 * --------------------------------------------------------------------------------
@@ -557,6 +636,61 @@ class SmartImg
 		}
 		
 		return $result;
+	}
+	
+	public static function cleanup()
+	{
+		$smartImg = new SmartImg();
+		
+		// iterate over aspects
+		$cacheDH = opendir($_SERVER['DOCUMENT_ROOT'] . $smartImg->cacheRootDir);
+		while (($aspectDir = readdir($cacheDH)) !== false)
+		{
+			if($aspectDir === '.' || $aspectDir === '..')
+				continue;
+			
+			// check if $aspectDir is a valid aspect
+			$aspectExists = false;
+			foreach($smartImg->_aspects as $aspect)
+			{
+				if($aspect['dir'] == $aspectDir)
+				{
+					$aspectExists = true;
+					break;
+				}
+			}
+			
+			if($aspectExists)
+			{
+				// iterate over resolutions
+				$aspectDH = opendir($_SERVER['DOCUMENT_ROOT'] . $smartImg->cacheRootDir . '/' . $aspectDir);
+				while (($resolutionDir = readdir($aspectDH)) !== false)
+				{
+					if($resolutionDir === '.' || $resolutionDir === '..')
+						continue;
+					
+					$resolutionExists = false;
+					foreach($smartImg->_resolutions as $resolution)
+					{
+						if($resolution['dir'] == $resolutionDir)
+						{
+							$resolutionExists = true;
+							break;
+						}
+					}
+					
+					if($resolutionExists)
+						$smartImg->cleanupCache($aspectDir . '/' . $resolutionDir, '');
+					else
+						$smartImg->recursiveDelete($_SERVER['DOCUMENT_ROOT'] . $smartImg->cacheRootDir . '/' . $aspectDir . '/' . $resolutionDir);
+				}
+				closedir($aspectDH);
+			}
+			else
+				$smartImg->recursiveDelete($_SERVER['DOCUMENT_ROOT'] . $smartImg->cacheRootDir . '/' . $aspectDir);
+		}
+		closedir($cacheDH);
+		return "cleanup finished";
 	}
 	
 	public static function test($args = null)

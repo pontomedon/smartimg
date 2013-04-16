@@ -247,8 +247,8 @@ class SmartImg
 	 * 							    'resource' => resource,
 	 * 							    'width' => int
 	 * 							    'height' => int
-	 * 								'extension' => string
-	 * 							or null if the image doesn't exist
+	 * 								'type' => int (one of the IMAGETYPE_XXX constants)
+	 * 							or null if the image doesn't exist or is unsupported
 	 */
 	private function readImage($path)
 	{
@@ -256,25 +256,30 @@ class SmartImg
 		if(!file_exists($_SERVER['DOCUMENT_ROOT'].$path))
 			return null;
 
-		$extension = strtolower(pathinfo($_SERVER['DOCUMENT_ROOT'].$path, PATHINFO_EXTENSION));
-
-		switch ($extension)
+		$imageSize = getimagesize($_SERVER['DOCUMENT_ROOT'].$path);
+		
+		if($imageSize === false)
+			return null;
+		
+		switch($imageSize[2])
 		{
-			case 'png':
+			case IMAGETYPE_PNG:
 				$img = @ImageCreateFromPng($_SERVER['DOCUMENT_ROOT'].$path);
 				break;
-			case 'gif':
+			case IMAGETYPE_GIF:
 				$img = @ImageCreateFromGif($_SERVER['DOCUMENT_ROOT'].$path);
 				break;
-			default:
+			case IMAGETYPE_JPEG:
 				$img = @ImageCreateFromJpeg($_SERVER['DOCUMENT_ROOT'].$path);
 				break;
+			default:
+				return null;
 		}
 		return array(
 				'resource' => $img,
 				'width' => imagesx($img),
 				'height' => imagesy($img),
-				'extension' => $extension
+				'type' => $imageSize[2]
 		);
 	}
 	
@@ -299,22 +304,22 @@ class SmartImg
 	
 	/**
 	 * creates an empty image with the specified dimension; also stores
-	 * an extension that will be used when saving the image.
+	 * a type that will be used when saving the image.
 	 * @param int $width			the width of the new image
 	 * @param int $height			the height of the new image
-	 * @param string $extension		the extension of the new image
+	 * @param int $type				the type of the new image (IMAGETYPE_XXX)
 	 * @return array 				an image as returned by readImage()
 	 */
-	private function createImage($width, $height, $extension)
+	private function createImage($width, $height, $type)
 	{
 		$img =  array(
 					'resource' => imagecreatetruecolor($width, $height),
 					'width' => $width,
 					'height' => $height,
-					'extension' => $extension
+					'type' => $type
 		);
 		
-		if($extension=='png')
+		if($type==IMAGETYPE_PNG)
 		{
 			imagealphablending($img['resource'], false);
 			imagesavealpha($img['resource'],true);
@@ -333,11 +338,11 @@ class SmartImg
 	 */
 	private function writeImage(array $image, $path)
 	{
-		switch ($image['extension'])
+		switch ($image['type'])
 		{
-			case 'png': return imagepng($image['resource'], $_SERVER['DOCUMENT_ROOT'].$path);
-			case 'gif': return imagegif($image['resource'], $_SERVER['DOCUMENT_ROOT'].$path);
-			default:
+			case IMAGETYPE_PNG: return imagepng($image['resource'], $_SERVER['DOCUMENT_ROOT'].$path);
+			case IMAGETYPE_GIF: return imagegif($image['resource'], $_SERVER['DOCUMENT_ROOT'].$path);
+			case IMAGETYPE_JPEG:
 				imageinterlace($image['resource'], true);
 				return imagejpeg($image['resource'], $_SERVER['DOCUMENT_ROOT'].$path, SmartImg::JPEG_QUALITY);
 		}
@@ -396,7 +401,7 @@ class SmartImg
 				$srcDimensions = $this->getCroppedDimensions(array($srcImage['width'],$srcImage['height']), $aspect);
 				
 				// create the destination image
-				$dstImage = $this->createImage($srcDimensions[0], $srcDimensions[1], $srcImage['extension']);
+				$dstImage = $this->createImage($srcDimensions[0], $srcDimensions[1], $srcImage['type']);
 				
 				// fill the destination image
 				imagecopy(	$dstImage['resource'],									// $dst_im
@@ -477,7 +482,7 @@ class SmartImg
 						(int)($widthBreakpoint['width']/$dstAspect)
 				);
 				
-				$dstImage = $this->createImage($dstDimensions[0], $dstDimensions[1], $srcImage['extension']);
+				$dstImage = $this->createImage($dstDimensions[0], $dstDimensions[1], $srcImage['type']);
 				
 				imagecopyresampled(	$dstImage['resource'],	// $dst_image
 									$srcImage['resource'],	// $src_image
@@ -522,21 +527,11 @@ class SmartImg
 			closedir($dir);
 				
 			if($empty)
-			{
-				echo "rmdir(" . $path . ") ... ";
-				$result = @rmdir($path);
-				echo ($result ? "ok" : "failed") . "<br>\n";
-				return $result;
-			}
+				retrurn (@rmdir($path));
 			return false;
 		}
 		else if(is_file($path))
-		{
-			echo "unlink(" . $path . ") ... ";
-			$result = @unlink($path);
-			echo ($result ? "ok" : "failed") . "<br>\n";
-			return $result;
-		}
+			return (@unlink($path));
 		return false;
 	}
 	
@@ -576,6 +571,66 @@ class SmartImg
 		}
 		
 		return false;
+	}
+	
+	private function findAllImages($path)
+	{
+		$result = array();
+		
+		if(is_dir($_SERVER['DOCUMENT_ROOT'] . '/' . $path))
+		{
+			$dir = opendir($_SERVER['DOCUMENT_ROOT'] . '/' . $path);
+			while (($file = readdir($dir)) !== false)
+			{
+				if($file === '.' || $file === '..')
+					continue;
+				array_splice($result, count($result), 0, $this->findAllImages($path . '/' . $file));
+			}
+			closedir($dir);
+		}
+		else if(is_file($_SERVER['DOCUMENT_ROOT'] . '/' . $path))
+		{
+			$imageSize = @getimagesize($_SERVER['DOCUMENT_ROOT'] . '/' . $path);
+			if($imageSize !== false && ($imageSize[2] == IMAGETYPE_PNG || $imageSize[2] == IMAGETYPE_GIF || $imageSize[2] == IMAGETYPE_JPEG))
+				$result[] = '/' . $path;
+		}
+		
+		return $result;
+	}
+	
+	private function render($path)
+	{
+		$images = $this->findAllImages($path);
+		
+		$imageRequestBundles = array();
+		
+		foreach($images as $image)
+		{
+			foreach($this->_resolutions as $resolution)
+			{
+				foreach($this->_aspects as $aspect)
+				{
+					$imageRequestBundles[] = array(
+							'src' => $image,
+							'width' => ($resolution['dir'] === SmartImg::DEFAULT_RESOLUTION ? null : $resolution['width']),
+							'aspect' => ($aspect['dir'] === SmartImg::DEFAULT_ASPECT ? null : ($aspect['width'] . ':' . $aspect['height']))
+					);
+				}
+			}
+		}
+		
+		$result = array();
+		
+		while(count($imageRequestBundles) > 0)
+		{
+			set_time_limit(30);
+			array_splice($result, count($result), 0, SmartImg::getImage(array_slice($imageRequestBundles, 0, 10)));
+			if(count($imageRequestBundles) > 10)
+				$imageRequestBundles = array_slice($imageRequestBundles, 10);
+		}
+		var_dump($result);
+		
+		return "Rendering finished";
 	}
 	
 	/*
@@ -634,11 +689,10 @@ class SmartImg
 		return $result;
 	}
 	
-	public static function renderAll($dir)
-	{
-		
-	}
-	
+	/**
+	 * cleans the cache, deleting all files in the cache where no original exists
+	 * @return string
+	 */
 	public static function cleanup()
 	{
 		$smartImg = new SmartImg();
@@ -692,6 +746,16 @@ class SmartImg
 		}
 		closedir($cacheDH);
 		return "cleanup finished";
+	}
+
+	/**
+	 * Traverses a given directory and renders all images it finds with all resolutions
+	 * and aspects
+	 * @param string $path
+	 */
+	public static function renderAll($path)
+	{
+		return (new SmartImg())->render($path);
 	}
 	
 	public static function test($args = null)

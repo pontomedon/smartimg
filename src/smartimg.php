@@ -63,11 +63,15 @@ class SmartImg
 	 */
 	private $_resolutions;
 	
+	private $_smartImgMtime;
+	
 	/**
 	 * Constructor
 	 */
 	function __construct()
 	{
+		$this->_smartImgMtime = filemtime(__FILE__);
+		
 		// copy and sort the user defined breakpoints
 		$resolutions = $this->resolutions;
 		arsort($resolutions);
@@ -213,16 +217,20 @@ class SmartImg
 	}
 	
 	/**
-	 * checks whether $cachePath exists and has the same mtime as $srcPath
+	 * checks whether both $srcPath and $cachePath exist and have the same mtime
 	 * @param string $cachePath		absolute path to the cache file
 	 * @param string $srcPath		absolute path to the source file
-	 * @return boolean if $cachePath exists and has the same mtime as $srcPath
+	 * @return boolean	if $srcPath exists && $cachePath exists && filemtime($cachePath) is newer than
+	 * 					both filemtime($srcPath) and filemtime(__FILE__)
 	 */
 	private function checkCache($cachePath, $srcPath)
 	{
-		if(	file_exists($_SERVER['DOCUMENT_ROOT'].$cachePath) &&
-			filemtime($_SERVER['DOCUMENT_ROOT'].$cachePath) == filemtime($_SERVER['DOCUMENT_ROOT'].$srcPath))
-			return true;
+		if(file_exists($_SERVER['DOCUMENT_ROOT'].$srcPath) && file_exists($_SERVER['DOCUMENT_ROOT'].$cachePath))
+		{
+			$cachemtime = filemtime($_SERVER['DOCUMENT_ROOT'].$cachePath);
+			if($cachemtime >= filemtime($_SERVER['DOCUMENT_ROOT'].$srcPath) && $cachemtime > $this->_smartImgMtime)
+				return true;
+		}
 		return false;
 	}
 	
@@ -416,8 +424,8 @@ class SmartImg
 							$srcDimensions[0],										// $src_w
 							$srcDimensions[1]);										// $src_h
 				
-				// and save it in the cache
-				$this->putCache($dstImage, $cachePath, filemtime($_SERVER['DOCUMENT_ROOT'].$srcPath));
+				// and save it in the cache using the current timestamp
+				$this->putCache($dstImage, $cachePath, time());
 				
 				// we can now close the original (unmodified) image...
 				imagedestroy($srcImage['resource']);
@@ -500,7 +508,7 @@ class SmartImg
 									$srcDimensions[0],							// $src_w
 									$srcDimensions[1]);							// $src_h
 
-				$this->putCache($dstImage, $cachePath, filemtime($_SERVER['DOCUMENT_ROOT'].$srcPath));
+				$this->putCache($dstImage, $cachePath, time());
 
 				// free both images
 				imagedestroy($srcImage['resource']);
@@ -571,7 +579,7 @@ class SmartImg
 		else if(is_file($cacheFile))
 		{
 			$srcFile = $_SERVER['DOCUMENT_ROOT'] . '/' . $path;
-			if(!is_file($srcFile) || filemtime($cacheFile) < filemtime($srcFile))
+			if(!$this->checkCache($cacheFile, $srcFile))
 				return $this->recursiveDelete($cacheFile);
 		}
 		

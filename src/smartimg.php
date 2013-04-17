@@ -768,7 +768,8 @@ class SmartImg
 	 */
 	public static function renderAll($path)
 	{
-		return (new SmartImg())->render($path);
+		$smartImg = new SmartImg();
+		return $smartImg->render($path);
 	}
 	
 	public static function test($args = null)

@@ -388,7 +388,10 @@ class SmartImg
 			$cachePath = $cacheDir . '/' . $filename;
 			
 			if($this->checkCache($cachePath, $srcPath)) // cache hit
+			{
+				// get dimensions of open cropped, not scaled version
 				$srcDimensions = $this->getImageDimensions($cachePath);
+			}
 			else // cache miss
 			{
 				// create cache directory
@@ -475,7 +478,9 @@ class SmartImg
 				if($srcImage === null)
 					$srcImage = $this->readImage($srcPath);
 				
-				$dstAspect = $srcImage['width']/$srcImage['height'];
+				// srcDimensions might contain the cropped/not resized dimensions
+				// instead of the actual image dimensions
+				$dstAspect = $srcDimensions[0]/$srcDimensions[1];
 				
 				$dstDimensions = array(
 						$widthBreakpoint['width'],
@@ -484,16 +489,16 @@ class SmartImg
 				
 				$dstImage = $this->createImage($dstDimensions[0], $dstDimensions[1], $srcImage['type']);
 				
-				imagecopyresampled(	$dstImage['resource'],	// $dst_image
-									$srcImage['resource'],	// $src_image
-									0,						// $dst_x
-									0,						// $dst_y
-									0,						// $src_x
-									0,						// $src_y
-									$dstDimensions[0],		// $dst_w
-									$dstDimensions[1],		// $dst_h
-									$srcImage['width'],		// $src_w
-									$srcImage['height']);	// $src_h
+				imagecopyresampled(	$dstImage['resource'],						// $dst_image
+									$srcImage['resource'],						// $src_image
+									0,											// $dst_x
+									0,											// $dst_y
+									($srcImage['width']-$srcDimensions[0])/2,	// $src_x
+									($srcImage['height']-$srcDimensions[1])/2,	// $src_y
+									$dstDimensions[0],							// $dst_w
+									$dstDimensions[1],							// $dst_h
+									$srcDimensions[0],							// $src_w
+									$srcDimensions[1]);							// $src_h
 
 				$this->putCache($dstImage, $cachePath, filemtime($_SERVER['DOCUMENT_ROOT'].$srcPath));
 
@@ -502,7 +507,7 @@ class SmartImg
 				imagedestroy($dstImage['resource']);
 			}
 		}
-		
+			
 		return $cachePath;
 	}
 	
@@ -573,6 +578,11 @@ class SmartImg
 		return false;
 	}
 	
+	/**
+	 * finds all supported images in a directory (recursively).
+	 * @param string $path a path, relative to docroot
+	 * @return array(string) paths to images (starting with a slash)
+	 */
 	private function findAllImages($path)
 	{
 		$result = array();
@@ -598,6 +608,11 @@ class SmartImg
 		return $result;
 	}
 	
+	/**
+	 * renders all supported images in the given directory in all resolutions and aspects 
+	 * @param string $path a path, relative to docroot
+	 * @return string
+	 */
 	private function render($path)
 	{
 		$images = $this->findAllImages($path);
@@ -627,7 +642,6 @@ class SmartImg
 			array_splice($result, count($result), 0, SmartImg::getImage(array_slice($imageRequestBundles, 0, 10)));
 			$imageRequestBundles = array_slice($imageRequestBundles, min(count($imageRequestBundles),10));
 		}
-		var_dump($result);
 		
 		return "Rendering finished";
 	}

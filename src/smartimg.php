@@ -36,7 +36,7 @@ class SmartImg
 	const RETURN_SRC_ON_FAIL	= true;
 	
 	// the cache directory, relative to the docroot
-	var $cacheRootDir			= "/media-cache";
+	var $cacheRootDir			= "/demo/cache";
 	
 	/*
 	 * --------------------------------------------------------------------------------

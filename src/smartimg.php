@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 define('REGEX_WIDTH', '/^[\d]+$/');
 define('REGEX_ASPECT', '/^([\d]+):([\d]+)$/');
@@ -36,7 +36,7 @@ class SmartImg
 	const RETURN_SRC_ON_FAIL	= true;
 	
 	// the cache directory, relative to the docroot
-	var $cacheRootDir			= "/demo/cache";
+	var $cacheRootDir			= "/media-cache";
 	
 	/*
 	 * --------------------------------------------------------------------------------
